@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Door Controller Configuration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .user-list {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .user-item:last-child {
+            border-bottom: none;
+        }
+        .remove-btn {
+            background-color: #d9534f;
+            color: white;
+            padding: 2px 5px;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        .input-group {
+            display: flex;
+        }
+        .input-group input {
+            flex: 1;
+            margin-right: 5px;
+        }
+        .input-group button {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Door Controller Configuration</h1>
+    <form id="configForm">
+        <div class="form-group">
+            <label for="wifi_ssid">WiFi SSID:</label>
+            <input type="text" id="wifi_ssid" name="wifi_ssid" required>
+        </div>
+        <div class="form-group">
+            <label for="wifi_password">WiFi Password:</label>
+            <input type="password" id="wifi_password" name="wifi_password" required>
+        </div>
+        <div class="form-group">
+            <label for="bot_token">Telegram Bot Token:</label>
+            <input type="text" id="bot_token" name="bot_token" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Authorized Users:</label>
+            <div class="input-group">
+                <input type="text" id="new_user_id" placeholder="Enter Telegram User ID">
+                <button type="button" id="add_user_btn">Add User</button>
+            </div>
+            <div id="users_list" class="user-list"></div>
+        </div>
+        
+        <div class="form-group">
+            <label>Authorized Groups:</label>
+            <div class="input-group">
+                <input type="text" id="new_group_id" placeholder="Enter Telegram Group ID">
+                <button type="button" id="add_group_btn">Add Group</button>
+            </div>
+            <div id="groups_list" class="user-list"></div>
+        </div>
+        
+        <button type="submit" id="save_btn">Save Configuration</button>
+        <button type="button" id="restart_btn">Save & Restart</button>
+    </form>
+    
+    <div id="status_message" class="status"></div>
+    
+    <script>
+        // Global variables to store user and group IDs
+        let users = [];
+        let groups = [];
+        
+        // Function to render users list
+        function renderUsersList() {
+            const usersList = document.getElementById('users_list');
+            usersList.innerHTML = '';
+            
+            if (users.length === 0) {
+                usersList.innerHTML = '<p>No authorized users added</p>';
+                return;
+            }
+            
+            users.forEach((userId, index) => {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.innerHTML = `
+                    <span>${userId}</span>
+                    <button type="button" class="remove-btn" data-index="${index}" data-type="user">Remove</button>
+                `;
+                usersList.appendChild(userItem);
+            });
+        }
+        
+        // Function to render groups list
+        function renderGroupsList() {
+            const groupsList = document.getElementById('groups_list');
+            groupsList.innerHTML = '';
+            
+            if (groups.length === 0) {
+                groupsList.innerHTML = '<p>No authorized groups added</p>';
+                return;
+            }
+            
+            groups.forEach((groupId, index) => {
+                const groupItem = document.createElement('div');
+                groupItem.className = 'user-item';
+                groupItem.innerHTML = `
+                    <span>${groupId}</span>
+                    <button type="button" class="remove-btn" data-index="${index}" data-type="group">Remove</button>
+                `;
+                groupsList.appendChild(groupItem);
+            });
+        }
+        
+        // Add user button click handler
+        document.getElementById('add_user_btn').addEventListener('click', () => {
+            const newUserInput = document.getElementById('new_user_id');
+            const newUserId = newUserInput.value.trim();
+            
+            if (newUserId && users.length < 10) {  // MAX_USER_IDS is 10
+                if (!users.includes(newUserId)) {
+                    users.push(newUserId);
+                    renderUsersList();
+                    newUserInput.value = '';
+                } else {
+                    showStatus('User ID already exists', false);
+                }
+            } else if (users.length >= 10) {
+                showStatus('Maximum number of users reached (10)', false);
+            } else {
+                showStatus('Please enter a valid User ID', false);
+            }
+        });
+        
+        // Add group button click handler
+        document.getElementById('add_group_btn').addEventListener('click', () => {
+            const newGroupInput = document.getElementById('new_group_id');
+            const newGroupId = newGroupInput.value.trim();
+            
+            if (newGroupId && groups.length < 5) {  // MAX_GROUP_IDS is 5
+                if (!groups.includes(newGroupId)) {
+                    groups.push(newGroupId);
+                    renderGroupsList();
+                    newGroupInput.value = '';
+                } else {
+                    showStatus('Group ID already exists', false);
+                }
+            } else if (groups.length >= 5) {
+                showStatus('Maximum number of groups reached (5)', false);
+            } else {
+                showStatus('Please enter a valid Group ID', false);
+            }
+        });
+        
+        // Event delegation for remove buttons
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-btn')) {
+                const index = parseInt(e.target.dataset.index);
+                const type = e.target.dataset.type;
+                
+                if (type === 'user') {
+                    users.splice(index, 1);
+                    renderUsersList();
+                } else if (type === 'group') {
+                    groups.splice(index, 1);
+                    renderGroupsList();
+                }
+            }
+        });
+        
+        // Show status message
+        function showStatus(message, isSuccess) {
+            const statusDiv = document.getElementById('status_message');
+            statusDiv.textContent = message;
+            statusDiv.className = isSuccess ? 'status success' : 'status error';
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Load existing configuration
+        function loadConfig() {
+            fetch('/config')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('wifi_ssid').value = data.wifi_ssid || '';
+                    document.getElementById('wifi_password').value = data.wifi_password || '';
+                    document.getElementById('bot_token').value = data.bot_token || '';
+                    
+                    users = data.users || [];
+                    groups = data.groups || [];
+                    
+                    renderUsersList();
+                    renderGroupsList();
+                })
+                .catch(error => {
+                    console.error('Error loading configuration:', error);
+                    showStatus('Error loading configuration', false);
+                });
+        }
+        
+        // Form submit handler
+        document.getElementById('configForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            saveConfig(false);
+        });
+        
+        // Restart button handler
+        document.getElementById('restart_btn').addEventListener('click', () => {
+            saveConfig(true);
+        });
+        
+        // Save configuration
+        function saveConfig(restart) {
+            const config = {
+                wifi_ssid: document.getElementById('wifi_ssid').value,
+                wifi_password: document.getElementById('wifi_password').value,
+                bot_token: document.getElementById('bot_token').value,
+                users: users,
+                groups: groups
+            };
+            
+            fetch('/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                showStatus('Configuration saved successfully', true);
+                
+                if (restart) {
+                    showStatus('Device restarting...', true);
+                    setTimeout(() => {
+                        fetch('/restart')
+                            .catch(() => {
+                                // Ignore error since device is restarting
+                            });
+                    }, 1000);
+                }
+            })
+            .catch(error => {
+                console.error('Error saving configuration:', error);
+                showStatus('Error saving configuration', false);
+            });
+        }
+        
+        // Load config on page load
+        document.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>
